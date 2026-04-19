@@ -328,6 +328,7 @@ local CurrentEnemies = {}
 local HeadSize = Vector3.new(0.001, 0.001, 0.001)
 local ActiveHighlights = {}
 local Active2DESP = {}
+local DeadFading = {}
 
 local function create2DESP(char)
     local box = Drawing.new("Square")
@@ -519,6 +520,7 @@ local function UpdateEnemies()
     if not espActive then
         CurrentEnemies = {}
         table.clear(TargetMetrics)
+        table.clear(DeadFading)
         for char, _ in pairs(Active2DESP) do remove2DESP(char) end
         for model, hl in pairs(ActiveHighlights) do
             if hl then hl:Destroy() end
@@ -561,7 +563,10 @@ local function UpdateEnemies()
                 ActiveHighlights[char]:Destroy()
                 ActiveHighlights[char] = nil
             end
-            remove2DESP(char)
+            -- Start fade out for healthbar and nametags instead of immediate removal
+            if Active2DESP[char] and not DeadFading[char] then
+                DeadFading[char] = { StartTime = os.clock(), Data = Active2DESP[char] }
+            end
             return
         end
 
@@ -569,6 +574,11 @@ local function UpdateEnemies()
         local charHash = thirdPerson:getCharacterHash()
         local headPart = charHash and charHash.Head or char:FindFirstChild("Head")
         if not headPart then return end
+
+        -- Remove from dead fading if player respawned
+        if DeadFading[char] then
+            DeadFading[char] = nil
+        end
 
         -- Update Metrics & Velocity for Prediction
         local velocity = Vector3.new(0, 0, 0)
@@ -686,6 +696,120 @@ local function UpdateEnemies()
             end
         end
     end)
+
+    --// Handle Dead Player Fade-out for Healthbar and Nametags
+    local currentTime = os.clock()
+    local fadeDuration = 1.5 -- seconds to fully fade out
+
+    for char, fadeData in pairs(DeadFading) do
+        local espData = fadeData.Data
+        local elapsed = currentTime - fadeData.StartTime
+        local fadeAlpha = math.clamp(1 - (elapsed / fadeDuration), 0, 1)
+
+        if fadeAlpha <= 0 or not char.Parent then
+            -- Fully faded or character removed, clean up
+            remove2DESP(char)
+            DeadFading[char] = nil
+        else
+            -- Apply fade transparency to healthbar and nametags only
+            local cam = workspace.CurrentCamera
+            local headPart = char:FindFirstChild("Head")
+            local rootPart = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+
+            if headPart and rootPart then
+                local hPos, hOn = cam:WorldToViewportPoint(headPart.Position)
+                local tPos, tOn = cam:WorldToViewportPoint(rootPart.Position)
+
+                if hOn or tOn then
+                    local charHeight = (hPos - tPos).Magnitude * 2.5
+                    local charWidth = charHeight * 0.5
+                    local boxPos = Vector2.new(hPos.X - charWidth / 2, hPos.Y - charHeight / 4)
+                    local boxSize = Vector2.new(charWidth, charHeight)
+
+                    -- Fade nametag
+                    if getFlag("PF_ESP_Nametags") then
+                        espData.NameTag.Visible = true
+                        espData.NameTag.Transparency = fadeAlpha
+                        espData.NameTag.Position = Vector2.new(boxPos.X + boxSize.X / 2, boxPos.Y - 15)
+                    else
+                        espData.NameTag.Visible = false
+                    end
+
+                    -- Fade healthbar elements
+                    if getFlag("PF_ESP_Healthbar") then
+                        espData.HealthOutline.Visible = true
+                        espData.HealthOutline.Transparency = fadeAlpha
+                        espData.HealthOutline.Position = Vector2.new(boxPos.X - 6, boxPos.Y - 1)
+                        espData.HealthOutline.Size = Vector2.new(4, boxSize.Y + 2)
+
+                        espData.HealthBar.Visible = true
+                        espData.HealthBar.Transparency = fadeAlpha
+                        espData.HealthBar.Position = Vector2.new(boxPos.X - 5, boxPos.Y + boxSize.Y)
+                        espData.HealthBar.Size = Vector2.new(2, 0)
+                        espData.HealthBar.Color = Color3.fromRGB(255, 0, 0) -- Empty/red for dead
+
+                        espData.HealthText.Visible = true
+                        espData.HealthText.Transparency = fadeAlpha
+                        espData.HealthText.Position = Vector2.new(boxPos.X - 10, boxPos.Y + boxSize.Y / 2)
+                        espData.HealthText.Text = "DEAD"
+                    else
+                        espData.HealthOutline.Visible = false
+                        espData.HealthBar.Visible = false
+                        espData.HealthText.Visible = false
+                    end
+
+                    -- Fade box ESP
+                    if getFlag("PF_ESP_Box") then
+                        local boxColor = getFlag("PF_ESP_DrawingColor")
+                        local outColor = getFlag("PF_ESP_BoxOutlineColor")
+
+                        espData.Box.Visible = true
+                        espData.Box.Transparency = fadeAlpha
+                        espData.Box.Position = boxPos
+                        espData.Box.Size = boxSize
+                        espData.Box.Color = boxColor
+
+                        if getFlag("PF_ESP_BoxOutline") then
+                            espData.OuterOutline.Visible = true
+                            espData.OuterOutline.Transparency = fadeAlpha
+                            espData.OuterOutline.Position = boxPos - Vector2.new(1, 1)
+                            espData.OuterOutline.Size = boxSize + Vector2.new(2, 2)
+                            espData.OuterOutline.Color = outColor
+
+                            espData.InnerOutline.Visible = true
+                            espData.InnerOutline.Transparency = fadeAlpha
+                            espData.InnerOutline.Position = boxPos + Vector2.new(1, 1)
+                            espData.InnerOutline.Size = boxSize - Vector2.new(2, 2)
+                            espData.InnerOutline.Color = outColor
+                        else
+                            espData.OuterOutline.Visible = false
+                            espData.InnerOutline.Visible = false
+                        end
+                    else
+                        espData.Box.Visible = false
+                        espData.OuterOutline.Visible = false
+                        espData.InnerOutline.Visible = false
+                    end
+
+                    espData.WeaponTag.Visible = false
+                else
+                    -- Off screen, hide all
+                    espData.Box.Visible = false
+                    espData.OuterOutline.Visible = false
+                    espData.InnerOutline.Visible = false
+                    espData.HealthOutline.Visible = false
+                    espData.HealthBar.Visible = false
+                    espData.HealthText.Visible = false
+                    espData.NameTag.Visible = false
+                    espData.WeaponTag.Visible = false
+                end
+            else
+                -- Missing parts, remove
+                remove2DESP(char)
+                DeadFading[char] = nil
+            end
+        end
+    end
 end
 
 local function isVisible(targetPart, enemyModel)
