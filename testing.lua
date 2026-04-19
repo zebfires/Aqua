@@ -958,12 +958,10 @@ if NetworkClient then
         local args = { ... }
         if getFlag("PF_Network_Logger") then print("[Network Out]", event, HttpService:JSONEncode(args)) end
 
-        local keyHeld = getFlag("PF_SilentAim_Key")
-        if keyHeld == nil then keyHeld = true end
         local chanceOne = math.random(1, 100)
         local chanceTwo = math.random(1, 100)
 
-        if getFlag("PF_SilentAim_Enabled") == true and keyHeld and event == "newbullets"
+        if getFlag("PF_SilentAim_Enabled") == true and event == "newbullets"
             and (getFlag("PF_SilentAim_HitChance") or 100) >= chanceOne then
             local bulletData = args[2]
             if bulletData and bulletData.firepos and bulletData.bullets then
@@ -1003,12 +1001,10 @@ end
 if BulletObject then
     local oldNew = BulletObject.new
     BulletObject.new = function(bulletData)
-        local keyHeld = getFlag("PF_SilentAim_Key")
-        if keyHeld == nil then keyHeld = true end
         local chanceOne = math.random(1, 100)
         local chanceTwo = math.random(1, 100)
 
-        if getFlag("PF_SilentAim_Enabled") == true and keyHeld
+        if getFlag("PF_SilentAim_Enabled") == true
             and (getFlag("PF_SilentAim_HitChance") or 100) >= chanceOne
             and bulletData.position and bulletData.velocity then
             local bonePref = getFlag("PF_SilentAim_Bone") or "Head"
