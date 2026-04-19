@@ -42,7 +42,7 @@ if not Library then
 end
 
 --// PF Internal Access
-local HUD, CharModule, GameState, NetworkClient, StateManager, ReplicationInterface, FirearmObject, MainCameraObject, WeaponController, PublicSettings
+local HUD, CharModule, GameState, NetworkClient, StateManager, ReplicationInterface, FirearmObject, MainCameraObject, WeaponController, PublicSettings, BulletObject
 local NetworkEvents = {}
 pcall(function()
     local require = getrenv().shared.require
@@ -52,9 +52,10 @@ pcall(function()
     MainCameraObject = require("MainCameraObject")
     WeaponController = require("WeaponController")
     PublicSettings = require("PublicSettings")
+    BulletObject = require("BulletObject")
 
     -- Stealth Bypass: Extract events table from internal upvalues to avoid MetaTable detection
-    local success, container = pcall(debug.getupvalue, NetworkClient.fireReady, 5)
+    local success, container = pcall(debug.getupvalue(NetworkClient.fireReady, 5))
     if success and type(container) == "table" then
         NetworkEvents = container
     end
@@ -141,7 +142,6 @@ AimbotSection:Toggle({ Name = "Aimbot Enabled", Flag = "PF_Aimbot_Enabled", Defa
     :Keybind({ Name = "Aimbot Key", Flag = "PF_Aimbot_Key", Key = Enum.KeyCode.E, Mode = "Hold" })
 
 AimbotSection:Toggle({ Name = "Use FOV", Flag = "PF_Aimbot_UseFOV", Default = true })
-AimbotSection:Toggle({ Name = "Silent Aim", Flag = "PF_SilentAim_Enabled", Default = false })
 AimbotSection:Toggle({ Name = "Auto Shoot", Flag = "PF_Aimbot_AutoShoot", Default = false })
 AimbotSection:Toggle({ Name = "Visibility Check", Flag = "PF_Aimbot_VisCheck", Default = false })
 AimbotSection:Toggle({ Name = "Aimbot Prediction", Flag = "PF_Aimbot_Prediction", Default = true })
@@ -176,6 +176,27 @@ TargetSection:Toggle({ Name = "Show FOV Circle", Flag = "PF_FOV_Visible", Defaul
 
 TargetSection:Toggle({ Name = "Show Target Line", Flag = "PF_Aimbot_TargetLine", Default = false })
 
+local SilentAimSection = CombatCol2:Section({ Name = "Silent Aim" })
+SilentAimSection:Toggle({ Name = "Enabled", Flag = "PF_SilentAim_Enabled", Default = false })
+    :Keybind({ Name = "Silent Key", Flag = "PF_SilentAim_Key", Key = Enum.KeyCode.Unknown, Mode = "Hold" })
+SilentAimSection:Toggle({ Name = "Visible Check", Flag = "PF_SilentAim_VisCheck", Default = false })
+SilentAimSection:Slider({ Name = "Hit Chance", Flag = "PF_SilentAim_HitChance", Min = 1, Max = 100, Default = 100, Suffix = "%" })
+SilentAimSection:Slider({ Name = "Head Shot Chance", Flag = "PF_SilentAim_HSChance", Min = 0, Max = 100, Default = 100, Suffix = "%" })
+SilentAimSection:Toggle({ Name = "Use FOV", Flag = "PF_SilentAim_UseFOV", Default = false })
+SilentAimSection:Slider({ Name = "FOV Radius", Flag = "PF_SilentAim_FOVRadius", Min = 2, Max = 1000, Default = 300, Suffix = "px" })
+SilentAimSection:Toggle({ Name = "Show FOV Circle", Flag = "PF_SilentAim_ShowFOV", Default = false })
+    :Colorpicker({ Flag = "PF_SilentAim_FOVColor", Color = Color3.fromRGB(255, 255, 255) })
+SilentAimSection:Toggle({ Name = "Use Dead FOV", Flag = "PF_SilentAim_UseDeadFOV", Default = false })
+SilentAimSection:Slider({ Name = "Dead FOV Radius", Flag = "PF_SilentAim_DeadFOVRadius", Min = 1, Max = 1000, Default = 100, Suffix = "px" })
+SilentAimSection:Toggle({ Name = "Show Dead FOV Circle", Flag = "PF_SilentAim_ShowDeadFOV", Default = false })
+    :Colorpicker({ Flag = "PF_SilentAim_DeadFOVColor", Color = Color3.fromRGB(255, 255, 255) })
+SilentAimSection:Dropdown({
+    Name = "Target Bone",
+    Flag = "PF_SilentAim_Bone",
+    Options = { "Head", "Torso" },
+    Default = "Head"
+})
+
 local GunMods = CombatCol2:Section({ Name = "Gun Enhancements" })
 GunMods:Toggle({ Name = "No Gun Sway", Flag = "PF_NoSway", Default = false })
 GunMods:Toggle({ Name = "No Camera Sway", Flag = "PF_NoCamSway", Default = false })
@@ -193,10 +214,22 @@ local PlayersESP = VisualsCol1:Section({ Name = "Player Highlights" })
 PlayersESP:Toggle({ Name = "Master ESP", Flag = "PF_ESP_Master", Default = true })
 PlayersESP:Toggle({ Name = "3D Highlights", Flag = "PF_ESP_Highlights", Default = true })
 PlayersESP:Label({ Name = "Fill Color" }):Colorpicker({ Flag = "PF_ESP_FillColor", Color = Color3.fromRGB(160, 50, 255) })
-PlayersESP:Label({ Name = "Outline Color" }):Colorpicker({ Flag = "PF_ESP_OutlineColor", Color = Color3.fromRGB(80, 20, 180) })
+PlayersESP:Label({ Name = "Outline Color" }):Colorpicker({
+    Flag = "PF_ESP_OutlineColor",
+    Color = Color3.fromRGB(80, 20,
+        180)
+})
 
-PlayersESP:Label({ Name = "Teammate Fill" }):Colorpicker({ Flag = "PF_ESP_TeamFillColor", Color = Color3.fromRGB(50, 255, 50) })
-PlayersESP:Label({ Name = "Teammate Outline" }):Colorpicker({ Flag = "PF_ESP_TeamOutlineColor", Color = Color3.fromRGB(255, 255, 255) })
+PlayersESP:Label({ Name = "Teammate Fill" }):Colorpicker({
+    Flag = "PF_ESP_TeamFillColor",
+    Color = Color3.fromRGB(50, 255,
+        50)
+})
+PlayersESP:Label({ Name = "Teammate Outline" }):Colorpicker({
+    Flag = "PF_ESP_TeamOutlineColor",
+    Color = Color3.fromRGB(
+        255, 255, 255)
+})
 
 PlayersESP:Slider({ Name = "Fill Opacity", Flag = "PF_ESP_FillTransparency", Min = 0, Max = 1, Default = 0.5, Decimal = 0.01 })
 PlayersESP:Slider({ Name = "Outline Opacity", Flag = "PF_ESP_OutlineTransparency", Min = 0, Max = 1, Default = 0.3, Decimal = 0.01 })
@@ -565,7 +598,8 @@ local function UpdateEnemies()
                     local hl = ActiveHighlights[char]
                     if hl then
                         hl.FillColor = isEnemy and getFlag("PF_ESP_FillColor") or getFlag("PF_ESP_TeamFillColor")
-                        hl.OutlineColor = isEnemy and getFlag("PF_ESP_OutlineColor") or getFlag("PF_ESP_TeamOutlineColor")
+                        hl.OutlineColor = isEnemy and getFlag("PF_ESP_OutlineColor") or
+                            getFlag("PF_ESP_TeamOutlineColor")
                         hl.FillTransparency = getFlag("PF_ESP_FillTransparency")
                         hl.OutlineTransparency = getFlag("PF_ESP_OutlineTransparency")
                     end
@@ -627,7 +661,8 @@ local function UpdateEnemies()
                             espData.HealthOutline.Position = Vector2.new(boxPos.X - 6, boxPos.Y - 1)
                             espData.HealthOutline.Size = Vector2.new(4, boxSize.Y + 2)
                             espData.HealthBar.Visible = true
-                            espData.HealthBar.Position = Vector2.new(boxPos.X - 5, boxPos.Y + boxSize.Y - (boxSize.Y * healthPerc))
+                            espData.HealthBar.Position = Vector2.new(boxPos.X - 5,
+                                boxPos.Y + boxSize.Y - (boxSize.Y * healthPerc))
                             espData.HealthBar.Size = Vector2.new(2, boxSize.Y * healthPerc)
                             espData.HealthBar.Color = Color3.fromHSV(healthPerc * 0.3, 1, 1)
                             boxVisible = true
@@ -644,7 +679,7 @@ local function UpdateEnemies()
                         end
                     end
                 end
-                
+
                 if not boxVisible and not getFlag("PF_ESP_Highlights") then
                     remove2DESP(char)
                 end
@@ -707,28 +742,124 @@ local function getClosestEnemy()
     return closestPart, bestDist
 end
 
+local function solve(v44, v45, v46, v47, v48)
+    if not v44 then
+        return
+    elseif v44 > -1.0E-10 and v44 < 1.0E-10 then
+        return solve(v45, v46, v47, v48)
+    else
+        if v48 then
+            local v49 = -v45 / (4 * v44)
+            local v50 = (v46 + v49 * (3 * v45 + 6 * v44 * v49)) / v44
+            local v51 = (v47 + v49 * (2 * v46 + v49 * (3 * v45 + 4 * v44 * v49))) / v44
+            local v52 = (v48 + v49 * (v47 + v49 * (v46 + v49 * (v45 + v44 * v49)))) / v44
+            if v51 > -1.0E-10 and v51 < 1.0E-10 then
+                local v53, v54 = solve(1, v50, v52)
+                if not v54 or v54 < 0 then
+                    return
+                else
+                    local v55 = math.sqrt(v53)
+                    local v56 = math.sqrt(v54)
+                    return v49 - v56, v49 - v55, v49 + v55, v49 + v56
+                end
+            else
+                local v57, _, v59 = solve(1, 2 * v50, v50 * v50 - 4 * v52, -v51 * v51)
+                local v60 = v59 or v57
+                local v61 = math.sqrt(v60)
+                local v62, v63 = solve(1, v61, (v60 + v50 - v51 / v61) / 2)
+                local v64, v65 = solve(1, -v61, (v60 + v50 + v51 / v61) / 2)
+                if v62 and v64 then
+                    return v49 + v62, v49 + v63, v49 + v64, v49 + v65
+                elseif v62 then
+                    return v49 + v62, v49 + v63
+                elseif v64 then
+                    return v49 + v64, v49 + v65
+                end
+            end
+        elseif v47 then
+            local v66 = -v45 / (3 * v44);
+            local v67 = -(v46 + v66 * (2 * v45 + 3 * v44 * v66)) / (3 * v44)
+            local v68 = -(v47 + v66 * (v46 + v66 * (v45 + v44 * v66))) / (2 * v44)
+            local v69 = v68 * v68 - v67 * v67 * v67
+            local v70 = math.sqrt((math.abs(v69)))
+            if v69 > 0 then
+                local v71 = v68 + v70
+                local v72 = v68 - v70
+                v71 = v71 < 0 and -(-v71) ^ 0.3333333333333333 or v71 ^ 0.3333333333333333
+                local v73 = v72 < 0 and -(-v72) ^ 0.3333333333333333 or v72 ^ 0.3333333333333333
+                return v66 + v71 + v73
+            else
+                local v74 = math.atan2(v70, v68) / 3
+                local v75 = 2 * math.sqrt(v67)
+                return v66 - v75 * math.sin(v74 + 0.5235987755982988), v66 + v75 * math.sin(v74 - 0.5235987755982988),
+                    v66 + v75 * math.cos(v74)
+            end;
+        elseif v46 then
+            local v76 = -v45 / (2 * v44)
+            local v77 = v76 * v76 - v46 / v44
+            if v77 < 0 then
+                return
+            else
+                local v78 = math.sqrt(v77)
+                return v76 - v78, v76 + v78
+            end
+        elseif v45 then
+            return -v45 / v44
+        end
+        return
+    end
+end
+
+local function complexTrajectory(o, a, t, s, e)
+    local ld = t - o
+    a = -a
+    e = e or Vector3.new(0, 0, 0)
+
+    local r1, r2, r3, r4 = solve(
+        a:Dot(a) * 0.25,
+        a:Dot(e),
+        a:Dot(ld) + e:Dot(e) - s ^ 2,
+        ld:Dot(e) * 2,
+        ld:Dot(ld)
+    )
+
+    local x = (r1 and r1 > 0 and r1) or (r2 and r2 > 0 and r2) or (r3 and r3 > 0 and r3) or r4
+    if not x then return nil end
+    local v = (ld + e * x + 0.5 * a * x ^ 2) / x
+    return v, x
+end
+
 local function GetPredictedPosition(targetPart, targetVelocity)
     local pos = targetPart.Position
     local predictionEnabled = getFlag("PF_Aimbot_Prediction")
     local dropEnabled = getFlag("PF_Aimbot_DropCorrection")
     local scale = getFlag("PF_Aimbot_PredictionScale") or 1
+
     if not predictionEnabled and not dropEnabled then return pos end
 
-    local bulletSpeed, gravity = 2500, -196.2
-    
+    local bulletSpeed, acceleration = 2500, Vector3.new(0, -196.2, 0)
+
     if WeaponController and PublicSettings then
         local controller = WeaponController.getController()
         if controller and controller._activeWeapon then
             bulletSpeed = controller._activeWeapon:getWeaponStat("bulletspeed") or 2500
         end
-        gravity = PublicSettings.bulletAcceleration.Y
+        acceleration = PublicSettings.bulletAcceleration
     end
 
     local cam = workspace.CurrentCamera
-    local timeToHit = (pos - cam.CFrame.Position).Magnitude / bulletSpeed
-    local predictedPos = pos + (targetVelocity * timeToHit * scale)
-    if dropEnabled then 
-        predictedPos = predictedPos + Vector3.new(0, 0.5 * math.abs(gravity) * (timeToHit ^ 2), 0) 
+    local velocity, timeToHit = complexTrajectory(cam.CFrame.Position, acceleration, pos, bulletSpeed,
+        targetVelocity * scale)
+
+    if velocity then
+        return cam.CFrame.Position + velocity * timeToHit, velocity
+    end
+
+    -- Fallback to basic prediction if solver fails
+    local timeToHitBasic = (pos - cam.CFrame.Position).Magnitude / bulletSpeed
+    local predictedPos = pos + (targetVelocity * timeToHitBasic * scale)
+    if dropEnabled then
+        predictedPos = predictedPos + Vector3.new(0, 0.5 * math.abs(acceleration.Y) * (timeToHitBasic ^ 2), 0)
     end
     return predictedPos
 end
@@ -765,22 +896,132 @@ local function TryAim()
     end
 end
 
+--// Silent Aim Drawings
+local silentFovCircle        = Drawing.new("Circle")
+silentFovCircle.Radius       = 300
+silentFovCircle.Color        = Color3.fromRGB(255, 255, 255)
+silentFovCircle.Thickness    = 2
+silentFovCircle.Transparency = 0.8
+silentFovCircle.Filled       = false
+silentFovCircle.NumSides     = 64
+silentFovCircle.Visible      = false
+
+local silentDeadFovCircle        = Drawing.new("Circle")
+silentDeadFovCircle.Radius       = 100
+silentDeadFovCircle.Color        = Color3.fromRGB(255, 255, 255)
+silentDeadFovCircle.Thickness    = 2
+silentDeadFovCircle.Transparency = 0.8
+silentDeadFovCircle.Filled       = false
+silentDeadFovCircle.NumSides     = 64
+silentDeadFovCircle.Visible      = false
+
+--// Silent Aim Target Selection
+local function getSilentTarget(bonePreference)
+    local cam = workspace.CurrentCamera
+    local centerPos = silentFovCircle.Position
+    local cx, cy = centerPos.X, centerPos.Y
+    local useFov = getFlag("PF_SilentAim_UseFOV")
+    local useDead = getFlag("PF_SilentAim_UseDeadFOV")
+    local fovRadius = silentFovCircle.Radius
+    local deadRadius = silentDeadFovCircle.Radius
+    local visCheck = getFlag("PF_SilentAim_VisCheck")
+
+    local bestPart, bestDist = nil, math.huge
+    local bestChar, bestData = nil, nil
+
+    for char, parts in pairs(CurrentEnemies) do
+        local targetPart = (bonePreference == "Torso") and parts.Torso or parts.Head
+        if targetPart then
+            local screenPos, onScreen = cam:WorldToViewportPoint(targetPart.Position)
+            if onScreen and screenPos.Z > 0 then
+                local fovDist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(cx, cy)).Magnitude
+                local pass = true
+                if useFov and fovDist > fovRadius then pass = false end
+                if pass and useDead and fovDist < deadRadius then pass = false end
+                if pass and visCheck and not isVisible(targetPart, char) then pass = false end
+                if pass and fovDist < bestDist then
+                    bestDist = fovDist
+                    bestPart = targetPart
+                    bestChar = char
+                    bestData = parts
+                end
+            end
+        end
+    end
+    return bestPart, bestChar, bestData
+end
+
 --// Silent Aim & Networking
 if NetworkClient then
     local oldSend = NetworkClient.send
     NetworkClient.send = function(self, event, ...)
         local args = { ... }
         if getFlag("PF_Network_Logger") then print("[Network Out]", event, HttpService:JSONEncode(args)) end
-        if getFlag("PF_SilentAim_Enabled") == true and (event == "newbullet" or event == "bullet") then
-            local targetPart = getClosestEnemy()
-            if targetPart and args[1].p and args[1].v then
-                local targetPos = targetPart.Position
-                local enemyData = CurrentEnemies[targetPart.Parent]
-                if enemyData then targetPos = GetPredictedPosition(targetPart, enemyData.Velocity) end
-                args[1].v = (targetPos - args[1].p).Unit * args[1].v.Magnitude
+
+        local chanceOne = math.random(1, 100)
+        local chanceTwo = math.random(1, 100)
+
+        if getFlag("PF_SilentAim_Enabled") == true and event == "newbullets"
+            and (getFlag("PF_SilentAim_HitChance") or 100) >= chanceOne then
+            local bulletData = args[2]
+            if bulletData and bulletData.firepos and bulletData.bullets then
+                local bonePref = getFlag("PF_SilentAim_Bone") or "Head"
+                if bonePref == "Head" and (getFlag("PF_SilentAim_HSChance") or 100) < chanceTwo then
+                    bonePref = "Torso"
+                end
+
+                local targetPart, _, enemyData = getSilentTarget(bonePref)
+                if targetPart and enemyData then
+                    local bulletSpeed = 2500
+                    local acceleration = Vector3.new(0, -196.2, 0)
+                    if WeaponController and PublicSettings then
+                        local controller = WeaponController.getController()
+                        if controller and controller._activeWeapon then
+                            bulletSpeed = controller._activeWeapon:getWeaponStat("bulletspeed") or 2500
+                        end
+                        acceleration = PublicSettings.bulletAcceleration or acceleration
+                    end
+
+                    local velocity = complexTrajectory(bulletData.firepos, acceleration, targetPart.Position,
+                        bulletSpeed, enemyData.Velocity or Vector3.zero)
+                    if velocity then
+                        local unitVel = velocity.Unit
+                        for _, bullet in ipairs(bulletData.bullets) do
+                            bullet[1] = unitVel
+                        end
+                    end
+                end
             end
         end
         return oldSend(self, event, unpack(args))
+    end
+end
+
+--// Visual Synchronization hook
+if BulletObject then
+    local oldNew = BulletObject.new
+    BulletObject.new = function(bulletData)
+        local chanceOne = math.random(1, 100)
+        local chanceTwo = math.random(1, 100)
+
+        if getFlag("PF_SilentAim_Enabled") == true
+            and (getFlag("PF_SilentAim_HitChance") or 100) >= chanceOne
+            and bulletData.position and bulletData.velocity then
+            local bonePref = getFlag("PF_SilentAim_Bone") or "Head"
+            if bonePref == "Head" and (getFlag("PF_SilentAim_HSChance") or 100) < chanceTwo then
+                bonePref = "Torso"
+            end
+
+            local targetPart, _, enemyData = getSilentTarget(bonePref)
+            if targetPart and enemyData then
+                local velocity = complexTrajectory(bulletData.position, bulletData.acceleration or Vector3.zero,
+                    targetPart.Position, bulletData.velocity.Magnitude, enemyData.Velocity or Vector3.zero)
+                if velocity then
+                    bulletData.velocity = velocity
+                end
+            end
+        end
+        return oldNew(bulletData)
     end
 end
 
@@ -819,10 +1060,23 @@ RunService.Heartbeat:Connect(function()
     if activeSky and activeSky ~= "Default" then ApplySkybox(activeSky) end
 
     local baseFOV = getFlag("PF_Aimbot_FOVRadius") or 150
-    fovCircle.Radius = getFlag("PF_Aimbot_DynamicFOV") and (baseFOV * (70 / workspace.CurrentCamera.FieldOfView)) or
-        baseFOV
+    local dynScale = getFlag("PF_Aimbot_DynamicFOV") and (70 / workspace.CurrentCamera.FieldOfView) or 1
+    fovCircle.Radius = baseFOV * dynScale
     fovCircle.Visible, fovCircle.Color, fovCircle.Position = getFlag("PF_FOV_Visible"), getFlag("PF_FOV_Color"),
         UserInputService:GetMouseLocation()
+
+    local mousePos = UserInputService:GetMouseLocation()
+    local silentBase = getFlag("PF_SilentAim_FOVRadius") or 300
+    silentFovCircle.Radius = silentBase * dynScale
+    silentFovCircle.Position = mousePos
+    silentFovCircle.Color = getFlag("PF_SilentAim_FOVColor") or Color3.new(1, 1, 1)
+    silentFovCircle.Visible = getFlag("PF_SilentAim_ShowFOV") == true
+
+    local deadBase = getFlag("PF_SilentAim_DeadFOVRadius") or 100
+    silentDeadFovCircle.Radius = deadBase * dynScale
+    silentDeadFovCircle.Position = mousePos
+    silentDeadFovCircle.Color = getFlag("PF_SilentAim_DeadFOVColor") or Color3.new(1, 1, 1)
+    silentDeadFovCircle.Visible = getFlag("PF_SilentAim_ShowDeadFOV") == true
 
     pcall(TryAim)
 end)
@@ -839,3 +1093,4 @@ if MiscOptions then
         Options[index] = value
     end
 end
+
